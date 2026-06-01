@@ -591,66 +591,142 @@ light:
     effects:
       # === STARBRIGHT CANON OVERRIDES (replace Nabu stock). Calm starfield palette. ===
       # Palette: VIOLET #8b5cf6 (139,92,246) / CYAN #5cf6e3 (92,246,227) / SILVER #e8e6f4 (232,230,244) / INDIGO #1e1b4b (30,27,75)
+      # ===== WAKE / WAITING — gentle violet breath, NOT a strobe =====
       - addressable_lambda:
           name: "Waiting for Command"
-          update_interval: 60ms
+          update_interval: 33ms
           lambda: |-
-            // Violet soft breath — slow, deep
-            static float t = 0.0f;
-            t += 0.06f;
-            float b = 0.10f + 0.50f * (sinf(t) + 1.0f) / 2.0f;  // 0.10..0.60
-            uint8_t r = (uint8_t)(139.0f * b);
-            uint8_t g = (uint8_t)(92.0f  * b);
-            uint8_t bl= (uint8_t)(246.0f * b);
-            for (uint8_t i = 0; i < 12; i++) it[i] = Color(r, g, bl);
+            static const int N = 12;
+            static int last_state = -1;
+            static int t0 = 0;
+            int now = millis();
+            if (last_state != 1) { last_state = 1; t0 = now; }
+            float phase = ((now - t0) % 1200) / 1200.0f;
+            float br = 0.5f + 0.5f * sinf(phase * 6.2831853f);
+            br *= 0.6f;
+            uint8_t r = (uint8_t)(0x8b * br);
+            uint8_t g = (uint8_t)(0x5c * br);
+            uint8_t b = (uint8_t)(0xf6 * br);
+            for (int i = 0; i < N; i++) it[i] = Color(r, g, b);
+
+      # ===== LISTENING — cyan-violet starfield =====
       - addressable_lambda:
           name: "Listening For Command"
-          update_interval: 50ms
+          update_interval: 33ms
           lambda: |-
-            // Cyan comet — bright dot rotating around the ring
-            static uint8_t pos = 0;
-            static uint8_t tick = 0;
-            tick++;
-            if (tick >= 3) { tick = 0; pos = (pos + 1) % 12; }
-            for (uint8_t i = 0; i < 12; i++) {
-              uint8_t d = (i + 12 - pos) % 12;
-              float b = 0.0f;
-              if (d == 0) b = 1.0f;
-              else if (d == 1 || d == 11) b = 0.45f;
-              else if (d == 2 || d == 10) b = 0.18f;
-              else b = 0.05f;  // dim background
-              uint8_t r = (uint8_t)(92.0f  * b);
-              uint8_t g = (uint8_t)(246.0f * b);
-              uint8_t bl= (uint8_t)(227.0f * b);
-              it[i] = Color(r, g, bl);
+            static const int N = 12;
+            static const int MAX_TW = 12;
+            struct Tw { int8_t px; int16_t age_ms; int16_t life_ms; int16_t fade_in_ms; int16_t hold_ms; float pal; float maxB; };
+            static Tw tw[MAX_TW] = {0};
+            static int last_spawn = 0;
+            static int last_state = -1;
+            int now = millis();
+            if (last_state != 2) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 2; last_spawn = now; }
+            int spawn_ms=220, density=5, life=2200, fade_in=900, hold=400; float maxB=0.45f, bias=0.6f;
+            if (now - last_spawn > spawn_ms) {
+              for (int i=0;i<MAX_TW;i++) {
+                if (tw[i].life_ms <= 0 || tw[i].age_ms >= tw[i].life_ms) {
+                  int active=0; for (int j=0;j<MAX_TW;j++) if (tw[j].life_ms>0 && tw[j].age_ms<tw[j].life_ms) active++;
+                  if (active < density) {
+                    tw[i].px = (esp_random() % N);
+                    tw[i].age_ms = 0;
+                    tw[i].life_ms = life + (esp_random() % (life*3/10)) - (life*15/100);
+                    tw[i].fade_in_ms = fade_in; tw[i].hold_ms = hold;
+                    tw[i].pal = (float)(esp_random() % 1000) / 1000.0f;
+                    tw[i].maxB = maxB * (0.7f + (float)(esp_random() % 300)/1000.0f);
+                    last_spawn = now;
+                  }
+                  break;
+                }
+              }
             }
+            float px_r[N]={0}, px_g[N]={0}, px_b[N]={0};
+            for (int i=0;i<MAX_TW;i++) {
+              if (tw[i].life_ms <= 0) continue;
+              tw[i].age_ms += 33;
+              if (tw[i].age_ms >= tw[i].life_ms) continue;
+              float br;
+              int fade_out = tw[i].life_ms - tw[i].fade_in_ms - tw[i].hold_ms;
+              if (tw[i].age_ms < tw[i].fade_in_ms) br = (float)tw[i].age_ms / tw[i].fade_in_ms;
+              else if (tw[i].age_ms < tw[i].fade_in_ms + tw[i].hold_ms) br = 1.0f;
+              else br = std::max(0.0f, 1.0f - (float)(tw[i].age_ms - tw[i].fade_in_ms - tw[i].hold_ms) / fade_out);
+              br *= tw[i].maxB;
+              float t = tw[i].pal + bias*0.35f; if (t>1.0f) t=1.0f; if (t<0.0f) t=0.0f;
+              float r,g,b;
+              if (t < 0.5f) { float u=t*2; r=0x1e + (0x8b-0x1e)*u; g=0x1b + (0x5c-0x1b)*u; b=0x4b + (0xf6-0x4b)*u; }
+              else { float u=(t-0.5f)*2; r=0x8b + (0x5c-0x8b)*u; g=0x5c + (0xf6-0x5c)*u; b=0xf6 + (0xe3-0xf6)*u; }
+              px_r[tw[i].px] += r * br; px_g[tw[i].px] += g * br; px_b[tw[i].px] += b * br;
+            }
+            for (int i=0;i<N;i++) it[i] = Color((uint8_t)std::min(255.0f,px_r[i]),(uint8_t)std::min(255.0f,px_g[i]),(uint8_t)std::min(255.0f,px_b[i]));
+
+      # ===== THINKING — slow indigo→violet breathing =====
       - addressable_lambda:
           name: "Thinking"
           update_interval: 50ms
           lambda: |-
-            // Violet fast breath — "I'm working on it"
-            static float t = 0.0f;
-            t += 0.12f;
-            float b = 0.15f + 0.55f * (sinf(t) + 1.0f) / 2.0f;  // 0.15..0.70
-            uint8_t r = (uint8_t)(139.0f * b);
-            uint8_t g = (uint8_t)(92.0f  * b);
-            uint8_t bl= (uint8_t)(246.0f * b);
-            for (uint8_t i = 0; i < 12; i++) it[i] = Color(r, g, bl);
+            static const int N = 12;
+            static int last_state = -1;
+            static int t0 = 0;
+            int now = millis();
+            if (last_state != 3) { last_state = 3; t0 = now; }
+            float phase = ((now - t0) % 3000) / 3000.0f;
+            float br = 0.5f + 0.5f * sinf(phase * 6.2831853f);
+            br = 0.15f + br * 0.30f;
+            float u = br;
+            uint8_t r = (uint8_t)((0x1e + (0x8b-0x1e)*u) * br);
+            uint8_t g = (uint8_t)((0x1b + (0x5c-0x1b)*u) * br);
+            uint8_t b = (uint8_t)((0x4b + (0xf6-0x4b)*u) * br);
+            for (int i = 0; i < N; i++) it[i] = Color(r, g, b);
+
+      # ===== REPLYING — soft violet starfield, faster =====
       - addressable_lambda:
           name: "Replying"
-          update_interval: 60ms
+          update_interval: 33ms
           lambda: |-
-            // Silver wave — soft brightness ripple around the ring
-            static float t = 0.0f;
-            t += 0.20f;
-            for (uint8_t i = 0; i < 12; i++) {
-              float phase = t + ((float)i * 0.524f);  // 2*pi/12
-              float b = 0.20f + 0.55f * (sinf(phase) + 1.0f) / 2.0f;  // 0.20..0.75
-              uint8_t r = (uint8_t)(232.0f * b);
-              uint8_t g = (uint8_t)(230.0f * b);
-              uint8_t bl= (uint8_t)(244.0f * b);
-              it[i] = Color(r, g, bl);
+            static const int N = 12;
+            static const int MAX_TW = 12;
+            struct Tw { int8_t px; int16_t age_ms; int16_t life_ms; int16_t fade_in_ms; int16_t hold_ms; float pal; float maxB; };
+            static Tw tw[MAX_TW] = {0};
+            static int last_spawn = 0;
+            static int last_state = -1;
+            int now = millis();
+            if (last_state != 4) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 4; last_spawn = now; }
+            int spawn_ms=140, density=6, life=1500, fade_in=600, hold=300; float maxB=0.6f, bias=0.0f;
+            if (now - last_spawn > spawn_ms) {
+              for (int i=0;i<MAX_TW;i++) {
+                if (tw[i].life_ms <= 0 || tw[i].age_ms >= tw[i].life_ms) {
+                  int active=0; for (int j=0;j<MAX_TW;j++) if (tw[j].life_ms>0 && tw[j].age_ms<tw[j].life_ms) active++;
+                  if (active < density) {
+                    tw[i].px = (esp_random() % N);
+                    tw[i].age_ms = 0;
+                    tw[i].life_ms = life + (esp_random() % (life*3/10)) - (life*15/100);
+                    tw[i].fade_in_ms = fade_in; tw[i].hold_ms = hold;
+                    tw[i].pal = (float)(esp_random() % 1000) / 1000.0f;
+                    tw[i].maxB = maxB * (0.7f + (float)(esp_random() % 300)/1000.0f);
+                    last_spawn = now;
+                  }
+                  break;
+                }
+              }
             }
+            float px_r[N]={0}, px_g[N]={0}, px_b[N]={0};
+            for (int i=0;i<MAX_TW;i++) {
+              if (tw[i].life_ms <= 0) continue;
+              tw[i].age_ms += 33;
+              if (tw[i].age_ms >= tw[i].life_ms) continue;
+              float br;
+              int fade_out = tw[i].life_ms - tw[i].fade_in_ms - tw[i].hold_ms;
+              if (tw[i].age_ms < tw[i].fade_in_ms) br = (float)tw[i].age_ms / tw[i].fade_in_ms;
+              else if (tw[i].age_ms < tw[i].fade_in_ms + tw[i].hold_ms) br = 1.0f;
+              else br = std::max(0.0f, 1.0f - (float)(tw[i].age_ms - tw[i].fade_in_ms - tw[i].hold_ms) / fade_out);
+              br *= tw[i].maxB;
+              float t = tw[i].pal + bias*0.35f; if (t>1.0f) t=1.0f; if (t<0.0f) t=0.0f;
+              float r,g,b;
+              if (t < 0.5f) { float u=t*2; r=0x1e + (0x8b-0x1e)*u; g=0x1b + (0x5c-0x1b)*u; b=0x4b + (0xf6-0x4b)*u; }
+              else { float u=(t-0.5f)*2; r=0x8b + (0x5c-0x8b)*u; g=0x5c + (0xf6-0x5c)*u; b=0xf6 + (0xe3-0xf6)*u; }
+              px_r[tw[i].px] += r * br; px_g[tw[i].px] += g * br; px_b[tw[i].px] += b * br;
+            }
+            for (int i=0;i<N;i++) it[i] = Color((uint8_t)std::min(255.0f,px_r[i]),(uint8_t)std::min(255.0f,px_g[i]),(uint8_t)std::min(255.0f,px_b[i]));
       - addressable_lambda:
           name: "Muted or Silent"
           update_interval: 16ms
