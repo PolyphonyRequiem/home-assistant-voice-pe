@@ -589,112 +589,39 @@ light:
         from: 0
         to: 6
     effects:
+      # === STARBRIGHT RED-TEST OVERRIDES (replace Nabu stock). Distinguishable by brightness. ===
       - addressable_lambda:
           name: "Waiting for Command"
-          update_interval: 100ms
+          update_interval: 200ms
           lambda: |-
-            auto light_color = id(led_ring).current_values;
-            Color color(light_color.get_red() * 255, light_color.get_green() * 255,
-                  light_color.get_blue() * 255);
-            for (uint8_t i = 0; i < 12; i++) {
-              if (i == id(global_led_animation_index) % 12) {
-                it[i] = color;
-              } else if (i == (id(global_led_animation_index) + 11) % 12) {
-                it[i] = color * 192;
-              } else if (i == (id(global_led_animation_index) + 10) % 12) {
-                it[i] = color * 128;
-              } else if (i == (id(global_led_animation_index) + 6) % 12) {
-                it[i] = color;
-              } else if (i == (id(global_led_animation_index) + 5) % 12) {
-                it[i] = color * 192;
-              } else if (i == (id(global_led_animation_index) + 4) % 12) {
-                it[i] = color * 128;
-              } else {
-                it[i] = Color::BLACK;
-              }
-            }
-            id(global_led_animation_index) = (id(global_led_animation_index) + 1) % 12;
+            // 50% red solid
+            for (uint8_t i = 0; i < 12; i++) it[i] = Color(128, 0, 0);
       - addressable_lambda:
           name: "Listening For Command"
-          update_interval: 50ms
+          update_interval: 200ms
           lambda: |-
-            auto light_color = id(led_ring).current_values;
-            Color color(light_color.get_red() * 255, light_color.get_green() * 255,
-                  light_color.get_blue() * 255);
-            for (uint8_t i = 0; i < 12; i++) {
-              if (i == id(global_led_animation_index) % 12) {
-                it[i] = color;
-              } else if (i == (id(global_led_animation_index) + 11) % 12) {
-                it[i] = color * 192;
-              } else if (i == (id(global_led_animation_index) + 10) % 12) {
-                it[i] = color * 128;
-              } else if (i == (id(global_led_animation_index) + 6) % 12) {
-                it[i] = color;
-              } else if (i == (id(global_led_animation_index) + 5) % 12) {
-                it[i] = color * 192;
-              } else if (i == (id(global_led_animation_index) + 4) % 12) {
-                it[i] = color * 128;
-              } else {
-                it[i] = Color::BLACK;
-              }
-            }
-            id(global_led_animation_index) = (id(global_led_animation_index) + 1) % 12;
+            // 100% red solid
+            for (uint8_t i = 0; i < 12; i++) it[i] = Color(255, 0, 0);
       - addressable_lambda:
           name: "Thinking"
-          update_interval: 10ms
-          lambda: |-
-            static uint8_t brightness_step = 0;
-            static bool brightness_decreasing = true;
-            static uint8_t brightness_step_number = 10;
-            if (initial_run) {
-              brightness_step = 0;
-              brightness_decreasing = true;
-            }
-            auto light_color = id(led_ring).current_values;
-            Color color(light_color.get_red() * 255, light_color.get_green() * 255,
-                  light_color.get_blue() * 255);
-            for (uint8_t i = 0; i < 12; i++) {
-              if (i == id(global_led_animation_index) % 12) {
-                it[i] = color * uint8_t(255/brightness_step_number*(brightness_step_number-brightness_step));
-              } else if (i == (id(global_led_animation_index) + 6) % 12) {
-                it[i] = color * uint8_t(255/brightness_step_number*(brightness_step_number-brightness_step));
-              } else {
-                it[i] = Color::BLACK;
-              }
-            }
-            if (brightness_decreasing) {
-              brightness_step++;
-            } else {
-              brightness_step--;
-            }
-            if (brightness_step == 0 || brightness_step == brightness_step_number) {
-              brightness_decreasing = !brightness_decreasing;
-            }
-      - addressable_lambda:
-          name: "Replying"
           update_interval: 50ms
           lambda: |-
-            id(global_led_animation_index) = (12 + id(global_led_animation_index) - 1) % 12;
-            auto light_color = id(led_ring).current_values;
-            Color color(light_color.get_red() * 255, light_color.get_green() * 255,
-                  light_color.get_blue() * 255);
-            for (uint8_t i = 0; i < 12; i++) {
-              if (i == (id(global_led_animation_index)) % 12) {
-                it[i] = color;
-              } else if (i == ( id(global_led_animation_index) + 1) % 12) {
-                it[i] = color * 192;
-              } else if (i == ( id(global_led_animation_index) + 2) % 12) {
-                it[i] = color * 128;
-              } else if (i == ( id(global_led_animation_index) + 6) % 12) {
-                it[i] = color;
-              } else if (i == ( id(global_led_animation_index) + 7) % 12) {
-                it[i] = color * 192;
-              } else if (i == ( id(global_led_animation_index) + 8) % 12) {
-                it[i] = color * 128;
-              } else {
-                it[i] = Color::BLACK;
-              }
-            }
+            // 75% red gentle breath
+            static float t = 0.0f;
+            t += 0.05f;
+            float b = 0.4f + 0.35f * (sinf(t) + 1.0f) / 2.0f;  // 0.4..0.75
+            uint8_t r = (uint8_t)(255.0f * b);
+            for (uint8_t i = 0; i < 12; i++) it[i] = Color(r, 0, 0);
+      - addressable_lambda:
+          name: "Replying"
+          update_interval: 100ms
+          lambda: |-
+            // 60% red soft pulse
+            static float t = 0.0f;
+            t += 0.15f;
+            float b = 0.3f + 0.3f * (sinf(t) + 1.0f) / 2.0f;  // 0.3..0.6
+            uint8_t r = (uint8_t)(255.0f * b);
+            for (uint8_t i = 0; i < 12; i++) it[i] = Color(r, 0, 0);
       - addressable_lambda:
           name: "Muted or Silent"
           update_interval: 16ms
