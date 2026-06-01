@@ -591,38 +591,20 @@ light:
     effects:
       # === STARBRIGHT CANON OVERRIDES (replace Nabu stock). Calm starfield palette. ===
       # Palette: VIOLET #8b5cf6 (139,92,246) / CYAN #5cf6e3 (92,246,227) / SILVER #e8e6f4 (232,230,244) / INDIGO #1e1b4b (30,27,75)
-      # ===== WAKE / WAITING — gentle violet breath, NOT a strobe =====
+      # ===== WAKE / WAITING — bright violet starburst =====
       - addressable_lambda:
           name: "Waiting for Command"
           update_interval: 33ms
           lambda: |-
             static const int N = 12;
-            static int last_state = -1;
-            static int t0 = 0;
-            int now = millis();
-            if (last_state != 1) { last_state = 1; t0 = now; }
-            float phase = ((now - t0) % 1200) / 1200.0f;
-            float br = 0.5f + 0.5f * sinf(phase * 6.2831853f);
-            br *= 0.6f;
-            uint8_t r = (uint8_t)(0x8b * br);
-            uint8_t g = (uint8_t)(0x5c * br);
-            uint8_t b = (uint8_t)(0xf6 * br);
-            for (int i = 0; i < N; i++) it[i] = Color(r, g, b);
-
-      # ===== LISTENING — cyan-violet starfield =====
-      - addressable_lambda:
-          name: "Listening For Command"
-          update_interval: 33ms
-          lambda: |-
-            static const int N = 12;
-            static const int MAX_TW = 12;
+            static const int MAX_TW = 16;
             struct Tw { int8_t px; int16_t age_ms; int16_t life_ms; int16_t fade_in_ms; int16_t hold_ms; float pal; float maxB; };
             static Tw tw[MAX_TW] = {0};
             static int last_spawn = 0;
             static int last_state = -1;
             int now = millis();
-            if (last_state != 2) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 2; last_spawn = now; }
-            int spawn_ms=220, density=5, life=2200, fade_in=900, hold=400; float maxB=0.45f, bias=0.6f;
+            if (last_state != 1) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 1; last_spawn = now; }
+            int spawn_ms=80, density=5, life=750, fade_in=150, hold=200; float maxB=1.0f, bias=0.0f;
             if (now - last_spawn > spawn_ms) {
               for (int i=0;i<MAX_TW;i++) {
                 if (tw[i].life_ms <= 0 || tw[i].age_ms >= tw[i].life_ms) {
@@ -659,28 +641,9 @@ light:
             }
             for (int i=0;i<N;i++) it[i] = Color((uint8_t)std::min(255.0f,px_r[i]),(uint8_t)std::min(255.0f,px_g[i]),(uint8_t)std::min(255.0f,px_b[i]));
 
-      # ===== THINKING — slow indigo→violet breathing =====
+      # ===== LISTENING — cyan starfield + silver gradient sweep =====
       - addressable_lambda:
-          name: "Thinking"
-          update_interval: 50ms
-          lambda: |-
-            static const int N = 12;
-            static int last_state = -1;
-            static int t0 = 0;
-            int now = millis();
-            if (last_state != 3) { last_state = 3; t0 = now; }
-            float phase = ((now - t0) % 3000) / 3000.0f;
-            float br = 0.5f + 0.5f * sinf(phase * 6.2831853f);
-            br = 0.15f + br * 0.30f;
-            float u = br;
-            uint8_t r = (uint8_t)((0x1e + (0x8b-0x1e)*u) * br);
-            uint8_t g = (uint8_t)((0x1b + (0x5c-0x1b)*u) * br);
-            uint8_t b = (uint8_t)((0x4b + (0xf6-0x4b)*u) * br);
-            for (int i = 0; i < N; i++) it[i] = Color(r, g, b);
-
-      # ===== REPLYING — soft violet starfield, faster =====
-      - addressable_lambda:
-          name: "Replying"
+          name: "Listening For Command"
           update_interval: 33ms
           lambda: |-
             static const int N = 12;
@@ -690,8 +653,8 @@ light:
             static int last_spawn = 0;
             static int last_state = -1;
             int now = millis();
-            if (last_state != 4) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 4; last_spawn = now; }
-            int spawn_ms=140, density=6, life=1500, fade_in=600, hold=300; float maxB=0.6f, bias=0.0f;
+            if (last_state != 2) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 2; last_spawn = now; }
+            int spawn_ms=90, density=11, life=950, fade_in=150, hold=50; float maxB=0.55f, bias=0.5f;
             if (now - last_spawn > spawn_ms) {
               for (int i=0;i<MAX_TW;i++) {
                 if (tw[i].life_ms <= 0 || tw[i].age_ms >= tw[i].life_ms) {
@@ -725,6 +688,132 @@ light:
               if (t < 0.5f) { float u=t*2; r=0x1e + (0x8b-0x1e)*u; g=0x1b + (0x5c-0x1b)*u; b=0x4b + (0xf6-0x4b)*u; }
               else { float u=(t-0.5f)*2; r=0x8b + (0x5c-0x8b)*u; g=0x5c + (0xf6-0x5c)*u; b=0xf6 + (0xe3-0xf6)*u; }
               px_r[tw[i].px] += r * br; px_g[tw[i].px] += g * br; px_b[tw[i].px] += b * br;
+            }
+            // SPIN OVERLAY: silver gradient sweep, speed=5.6 LEDs/sec, width=3, brightness=0.35
+            float spin_pos = fmodf((float)now / 1000.0f * 5.6f, (float)N);
+            for (int i=0;i<N;i++) {
+              float d = (float)i - spin_pos; while (d < 0) d += N; while (d >= N) d -= N;
+              if (d > N/2.0f) d = N - d;  // shortest distance around ring
+              if (d <= 3.0f) {
+                float k = (1.0f - d/3.0f) * 0.35f;
+                px_r[i] += 0xe8 * k; px_g[i] += 0xe6 * k; px_b[i] += 0xf4 * k;
+              }
+            }
+            for (int i=0;i<N;i++) it[i] = Color((uint8_t)std::min(255.0f,px_r[i]),(uint8_t)std::min(255.0f,px_g[i]),(uint8_t)std::min(255.0f,px_b[i]));
+
+      # ===== THINKING — indigo-violet starfield + slow violet sweep =====
+      - addressable_lambda:
+          name: "Thinking"
+          update_interval: 33ms
+          lambda: |-
+            static const int N = 12;
+            static const int MAX_TW = 12;
+            struct Tw { int8_t px; int16_t age_ms; int16_t life_ms; int16_t fade_in_ms; int16_t hold_ms; float pal; float maxB; };
+            static Tw tw[MAX_TW] = {0};
+            static int last_spawn = 0;
+            static int last_state = -1;
+            int now = millis();
+            if (last_state != 3) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 3; last_spawn = now; }
+            int spawn_ms=180, density=5, life=3200, fade_in=1400, hold=600; float maxB=0.55f, bias=-0.3f;
+            if (now - last_spawn > spawn_ms) {
+              for (int i=0;i<MAX_TW;i++) {
+                if (tw[i].life_ms <= 0 || tw[i].age_ms >= tw[i].life_ms) {
+                  int active=0; for (int j=0;j<MAX_TW;j++) if (tw[j].life_ms>0 && tw[j].age_ms<tw[j].life_ms) active++;
+                  if (active < density) {
+                    tw[i].px = (esp_random() % N);
+                    tw[i].age_ms = 0;
+                    tw[i].life_ms = life + (esp_random() % (life*3/10)) - (life*15/100);
+                    tw[i].fade_in_ms = fade_in; tw[i].hold_ms = hold;
+                    tw[i].pal = (float)(esp_random() % 1000) / 1000.0f;
+                    tw[i].maxB = maxB * (0.7f + (float)(esp_random() % 300)/1000.0f);
+                    last_spawn = now;
+                  }
+                  break;
+                }
+              }
+            }
+            float px_r[N]={0}, px_g[N]={0}, px_b[N]={0};
+            for (int i=0;i<MAX_TW;i++) {
+              if (tw[i].life_ms <= 0) continue;
+              tw[i].age_ms += 33;
+              if (tw[i].age_ms >= tw[i].life_ms) continue;
+              float br;
+              int fade_out = tw[i].life_ms - tw[i].fade_in_ms - tw[i].hold_ms;
+              if (tw[i].age_ms < tw[i].fade_in_ms) br = (float)tw[i].age_ms / tw[i].fade_in_ms;
+              else if (tw[i].age_ms < tw[i].fade_in_ms + tw[i].hold_ms) br = 1.0f;
+              else br = std::max(0.0f, 1.0f - (float)(tw[i].age_ms - tw[i].fade_in_ms - tw[i].hold_ms) / fade_out);
+              br *= tw[i].maxB;
+              float t = tw[i].pal + bias*0.35f; if (t>1.0f) t=1.0f; if (t<0.0f) t=0.0f;
+              float r,g,b;
+              if (t < 0.5f) { float u=t*2; r=0x1e + (0x8b-0x1e)*u; g=0x1b + (0x5c-0x1b)*u; b=0x4b + (0xf6-0x4b)*u; }
+              else { float u=(t-0.5f)*2; r=0x8b + (0x5c-0x8b)*u; g=0x5c + (0xf6-0x5c)*u; b=0xf6 + (0xe3-0xf6)*u; }
+              px_r[tw[i].px] += r * br; px_g[tw[i].px] += g * br; px_b[tw[i].px] += b * br;
+            }
+            // SPIN OVERLAY: violet slow gradient, speed=1.1 LEDs/sec, width=2, brightness=0.6
+            float spin_pos = fmodf((float)now / 1000.0f * 1.1f, (float)N);
+            for (int i=0;i<N;i++) {
+              float d = (float)i - spin_pos; while (d < 0) d += N; while (d >= N) d -= N;
+              if (d > N/2.0f) d = N - d;
+              if (d <= 2.0f) {
+                float k = (1.0f - d/2.0f) * 0.6f;
+                px_r[i] += 0x8b * k; px_g[i] += 0x5c * k; px_b[i] += 0xf6 * k;
+              }
+            }
+            for (int i=0;i<N;i++) it[i] = Color((uint8_t)std::min(255.0f,px_r[i]),(uint8_t)std::min(255.0f,px_g[i]),(uint8_t)std::min(255.0f,px_b[i]));
+
+      # ===== REPLYING — violet starfield + violet pulse =====
+      - addressable_lambda:
+          name: "Replying"
+          update_interval: 33ms
+          lambda: |-
+            static const int N = 12;
+            static const int MAX_TW = 12;
+            struct Tw { int8_t px; int16_t age_ms; int16_t life_ms; int16_t fade_in_ms; int16_t hold_ms; float pal; float maxB; };
+            static Tw tw[MAX_TW] = {0};
+            static int last_spawn = 0;
+            static int last_state = -1;
+            int now = millis();
+            if (last_state != 4) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 4; last_spawn = now; }
+            int spawn_ms=70, density=9, life=1500, fade_in=700, hold=350; float maxB=0.9f, bias=0.0f;
+            if (now - last_spawn > spawn_ms) {
+              for (int i=0;i<MAX_TW;i++) {
+                if (tw[i].life_ms <= 0 || tw[i].age_ms >= tw[i].life_ms) {
+                  int active=0; for (int j=0;j<MAX_TW;j++) if (tw[j].life_ms>0 && tw[j].age_ms<tw[j].life_ms) active++;
+                  if (active < density) {
+                    tw[i].px = (esp_random() % N);
+                    tw[i].age_ms = 0;
+                    tw[i].life_ms = life + (esp_random() % (life*3/10)) - (life*15/100);
+                    tw[i].fade_in_ms = fade_in; tw[i].hold_ms = hold;
+                    tw[i].pal = (float)(esp_random() % 1000) / 1000.0f;
+                    tw[i].maxB = maxB * (0.7f + (float)(esp_random() % 300)/1000.0f);
+                    last_spawn = now;
+                  }
+                  break;
+                }
+              }
+            }
+            float px_r[N]={0}, px_g[N]={0}, px_b[N]={0};
+            for (int i=0;i<MAX_TW;i++) {
+              if (tw[i].life_ms <= 0) continue;
+              tw[i].age_ms += 33;
+              if (tw[i].age_ms >= tw[i].life_ms) continue;
+              float br;
+              int fade_out = tw[i].life_ms - tw[i].fade_in_ms - tw[i].hold_ms;
+              if (tw[i].age_ms < tw[i].fade_in_ms) br = (float)tw[i].age_ms / tw[i].fade_in_ms;
+              else if (tw[i].age_ms < tw[i].fade_in_ms + tw[i].hold_ms) br = 1.0f;
+              else br = std::max(0.0f, 1.0f - (float)(tw[i].age_ms - tw[i].fade_in_ms - tw[i].hold_ms) / fade_out);
+              br *= tw[i].maxB;
+              float t = tw[i].pal + bias*0.35f; if (t>1.0f) t=1.0f; if (t<0.0f) t=0.0f;
+              float r,g,b;
+              if (t < 0.5f) { float u=t*2; r=0x1e + (0x8b-0x1e)*u; g=0x1b + (0x5c-0x1b)*u; b=0x4b + (0xf6-0x4b)*u; }
+              else { float u=(t-0.5f)*2; r=0x8b + (0x5c-0x8b)*u; g=0x5c + (0xf6-0x5c)*u; b=0xf6 + (0xe3-0xf6)*u; }
+              px_r[tw[i].px] += r * br; px_g[tw[i].px] += g * br; px_b[tw[i].px] += b * br;
+            }
+            // PULSE OVERLAY: violet full-ring, speed=4 Hz/(2pi), brightness=0.5
+            float pulse = 0.5f + 0.5f * sinf((float)now / 1000.0f * 4.0f);
+            float k = pulse * 0.5f;
+            for (int i=0;i<N;i++) {
+              px_r[i] += 0x8b * k; px_g[i] += 0x5c * k; px_b[i] += 0xf6 * k;
             }
             for (int i=0;i<N;i++) it[i] = Color((uint8_t)std::min(255.0f,px_r[i]),(uint8_t)std::min(255.0f,px_g[i]),(uint8_t)std::min(255.0f,px_b[i]));
       - addressable_lambda:
