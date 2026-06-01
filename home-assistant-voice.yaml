@@ -1320,7 +1320,9 @@ script:
           condition:
             light.is_on: led_ring
           then:
-            light.turn_on: led_ring
+            - light.turn_on:
+                id: led_ring
+                effect: "Twinkle"
 
   # Script executed when the voice assistant is waiting for a command (After the wake word)
   # Slow clockwise spin of the LED ring.
