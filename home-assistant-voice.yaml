@@ -591,53 +591,46 @@ light:
     effects:
       # === STARBRIGHT CANON OVERRIDES (replace Nabu stock). Calm starfield palette. ===
       # Palette: VIOLET #8b5cf6 (139,92,246) / CYAN #5cf6e3 (92,246,227) / SILVER #e8e6f4 (232,230,244) / INDIGO #1e1b4b (30,27,75)
-      # ===== WAKE / WAITING — bright violet starburst =====
+      # ===== WAKE / WAITING — silver→cyan→indigo bidirectional bloom, 3s loop =====
       - addressable_lambda:
           name: "Waiting for Command"
           update_interval: 33ms
           lambda: |-
             static const int N = 12;
-            static const int MAX_TW = 16;
-            struct Tw { int8_t px; int16_t age_ms; int16_t life_ms; int16_t fade_in_ms; int16_t hold_ms; float pal; float maxB; };
-            static Tw tw[MAX_TW] = {0};
-            static int last_spawn = 0;
             static int last_state = -1;
+            static int wake_start = 0;
             int now = millis();
-            if (last_state != 1) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 1; last_spawn = now; }
-            int spawn_ms=80, density=5, life=750, fade_in=150, hold=200; float maxB=1.0f, bias=0.0f;
-            if (now - last_spawn > spawn_ms) {
-              for (int i=0;i<MAX_TW;i++) {
-                if (tw[i].life_ms <= 0 || tw[i].age_ms >= tw[i].life_ms) {
-                  int active=0; for (int j=0;j<MAX_TW;j++) if (tw[j].life_ms>0 && tw[j].age_ms<tw[j].life_ms) active++;
-                  if (active < density) {
-                    tw[i].px = (esp_random() % N);
-                    tw[i].age_ms = 0;
-                    tw[i].life_ms = life + (esp_random() % (life*3/10)) - (life*15/100);
-                    tw[i].fade_in_ms = fade_in; tw[i].hold_ms = hold;
-                    tw[i].pal = (float)(esp_random() % 1000) / 1000.0f;
-                    tw[i].maxB = maxB * (0.7f + (float)(esp_random() % 300)/1000.0f);
-                    last_spawn = now;
-                  }
-                  break;
-                }
-              }
-            }
+            if (last_state != 1) { last_state = 1; wake_start = now; }
+            const int T = 3000;
+            float t = ((now - wake_start) % T) / (float)T;  // 0..1
+            // expansion phase 0..0.5: bloom from origin LED outward both ways
+            // contraction/fade phase 0.5..1.0: hold ring, color shift, fade out
+            const int origin = 0;  // 12 o'clock LED
+            float spread;
+            if (t < 0.5f) spread = (t / 0.5f) * (N / 2.0f);
+            else spread = N / 2.0f;  // full ring
+            // color: silver (0..0.33) -> cyan (0.33..0.66) -> indigo (0.66..1.0)
+            float cr, cg, cb;
+            if (t < 0.33f) { float u = t / 0.33f; cr = 0xe8 + (0x5c-0xe8)*u; cg = 0xe6 + (0xf6-0xe6)*u; cb = 0xf4 + (0xe3-0xf4)*u; }
+            else if (t < 0.66f) { float u = (t-0.33f)/0.33f; cr = 0x5c + (0x1e-0x5c)*u; cg = 0xf6 + (0x1b-0xf6)*u; cb = 0xe3 + (0x4b-0xe3)*u; }
+            else { float u = (t-0.66f)/0.34f; cr = 0x1e * (1-u*0.7f); cg = 0x1b * (1-u*0.7f); cb = 0x4b * (1-u*0.7f); }
+            // brightness envelope: fast attack, hold, fade
+            float env;
+            if (t < 0.15f) env = t / 0.15f;
+            else if (t < 0.85f) env = 1.0f;
+            else env = 1.0f - (t - 0.85f) / 0.15f;
             float px_r[N]={0}, px_g[N]={0}, px_b[N]={0};
-            for (int i=0;i<MAX_TW;i++) {
-              if (tw[i].life_ms <= 0) continue;
-              tw[i].age_ms += 33;
-              if (tw[i].age_ms >= tw[i].life_ms) continue;
-              float br;
-              int fade_out = tw[i].life_ms - tw[i].fade_in_ms - tw[i].hold_ms;
-              if (tw[i].age_ms < tw[i].fade_in_ms) br = (float)tw[i].age_ms / tw[i].fade_in_ms;
-              else if (tw[i].age_ms < tw[i].fade_in_ms + tw[i].hold_ms) br = 1.0f;
-              else br = std::max(0.0f, 1.0f - (float)(tw[i].age_ms - tw[i].fade_in_ms - tw[i].hold_ms) / fade_out);
-              br *= tw[i].maxB;
-              float t = tw[i].pal + bias*0.35f; if (t>1.0f) t=1.0f; if (t<0.0f) t=0.0f;
-              float r,g,b;
-              if (t < 0.5f) { float u=t*2; r=0x1e + (0x8b-0x1e)*u; g=0x1b + (0x5c-0x1b)*u; b=0x4b + (0xf6-0x4b)*u; }
-              else { float u=(t-0.5f)*2; r=0x8b + (0x5c-0x8b)*u; g=0x5c + (0xf6-0x5c)*u; b=0xf6 + (0xe3-0xf6)*u; }
-              px_r[tw[i].px] += r * br; px_g[tw[i].px] += g * br; px_b[tw[i].px] += b * br;
+            for (int i = 0; i < N; i++) {
+              float d = (float)abs(i - origin);
+              if (d > N/2.0f) d = N - d;
+              if (d <= spread + 0.5f) {
+                // soft edge falloff
+                float edge_dist = spread - d;
+                float k = 1.0f;
+                if (edge_dist < 1.0f) k = std::max(0.0f, edge_dist);
+                k *= env;
+                px_r[i] = cr * k; px_g[i] = cg * k; px_b[i] = cb * k;
+              }
             }
             for (int i=0;i<N;i++) it[i] = Color((uint8_t)std::min(255.0f,px_r[i]),(uint8_t)std::min(255.0f,px_g[i]),(uint8_t)std::min(255.0f,px_b[i]));
 
@@ -1127,6 +1120,57 @@ light:
       - id: leds_internal
         from: 0
         to: 6
+    effects:
+      # Mirror Twinkle name on this partition so idle script's
+      # light.turn_on id: led_ring effect: "Twinkle" resolves.
+      - addressable_lambda:
+          name: "Twinkle"
+          update_interval: 33ms
+          lambda: |-
+            static const int N = 12;
+            static const int MAX_TW = 16;
+            struct Tw { int8_t px; int16_t age_ms; int16_t life_ms; int16_t fade_in_ms; int16_t hold_ms; float pal; float maxB; };
+            static Tw tw[MAX_TW] = {0};
+            static int last_spawn = 0;
+            static int last_state = -1;
+            int now = millis();
+            if (last_state != 99) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 99; last_spawn = now; }
+            int spawn_ms=160, density=6, life=2800, fade_in=1200, hold=400; float maxB=0.55f, bias=0.4f;
+            if (now - last_spawn > spawn_ms) {
+              for (int i=0;i<MAX_TW;i++) {
+                if (tw[i].life_ms <= 0 || tw[i].age_ms >= tw[i].life_ms) {
+                  int active=0; for (int j=0;j<MAX_TW;j++) if (tw[j].life_ms>0 && tw[j].age_ms<tw[j].life_ms) active++;
+                  if (active < density) {
+                    tw[i].px = (esp_random() % N);
+                    tw[i].age_ms = 0;
+                    tw[i].life_ms = life + (esp_random() % (life*3/10)) - (life*15/100);
+                    tw[i].fade_in_ms = fade_in; tw[i].hold_ms = hold;
+                    tw[i].pal = (float)(esp_random() % 1000) / 1000.0f;
+                    tw[i].maxB = maxB * (0.7f + (float)(esp_random() % 300)/1000.0f);
+                    last_spawn = now;
+                  }
+                  break;
+                }
+              }
+            }
+            float px_r[N]={0}, px_g[N]={0}, px_b[N]={0};
+            for (int i=0;i<MAX_TW;i++) {
+              if (tw[i].life_ms <= 0) continue;
+              tw[i].age_ms += 33;
+              if (tw[i].age_ms >= tw[i].life_ms) continue;
+              float br;
+              int fade_out = tw[i].life_ms - tw[i].fade_in_ms - tw[i].hold_ms;
+              if (tw[i].age_ms < tw[i].fade_in_ms) br = (float)tw[i].age_ms / tw[i].fade_in_ms;
+              else if (tw[i].age_ms < tw[i].fade_in_ms + tw[i].hold_ms) br = 1.0f;
+              else br = std::max(0.0f, 1.0f - (float)(tw[i].age_ms - tw[i].fade_in_ms - tw[i].hold_ms) / fade_out);
+              br *= tw[i].maxB;
+              float t = tw[i].pal + bias*0.35f; if (t>1.0f) t=1.0f; if (t<0.0f) t=0.0f;
+              float r,g,b;
+              if (t < 0.5f) { float u=t*2; r=0x1e + (0x8b-0x1e)*u; g=0x1b + (0x5c-0x1b)*u; b=0x4b + (0xf6-0x4b)*u; }
+              else { float u=(t-0.5f)*2; r=0x8b + (0x5c-0x8b)*u; g=0x5c + (0xf6-0x5c)*u; b=0xf6 + (0xe3-0xf6)*u; }
+              px_r[tw[i].px] += r * br; px_g[tw[i].px] += g * br; px_b[tw[i].px] += b * br;
+            }
+            for (int i=0;i<N;i++) it[i] = Color((uint8_t)std::min(255.0f,px_r[i]),(uint8_t)std::min(255.0f,px_g[i]),(uint8_t)std::min(255.0f,px_b[i]));
 
 power_supply:
   - id: led_power
