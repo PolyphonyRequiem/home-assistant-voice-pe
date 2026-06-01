@@ -621,7 +621,8 @@ light:
             else env = 1.0f - (t - 0.85f) / 0.15f;
             float px_r[N]={0}, px_g[N]={0}, px_b[N]={0};
             for (int i = 0; i < N; i++) {
-              float d = (float)abs(i - origin);
+              int diff = i - origin; if (diff < 0) diff = -diff;
+              float d = (float)diff;
               if (d > N/2.0f) d = N - d;
               if (d <= spread + 0.5f) {
                 // soft edge falloff
@@ -731,7 +732,8 @@ light:
               float radius = std::min((float)(N/2), t * (N/2.0f) * bursts[i].speedMult);
               float brightness = (1.0f - t) * (1.0f - t);
               for (int j=0;j<N;j++) {
-                float d = (float)abs(j - bursts[i].origin);
+                int diff = j - bursts[i].origin; if (diff < 0) diff = -diff;
+                float d = (float)diff;
                 if (d > N/2.0f) d = N - d;
                 float dist = fabsf(d - radius);
                 if (dist <= 2.0f) {
