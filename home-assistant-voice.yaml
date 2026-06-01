@@ -641,20 +641,20 @@ light:
             }
             for (int i=0;i<N;i++) it[i] = Color((uint8_t)std::min(255.0f,px_r[i]),(uint8_t)std::min(255.0f,px_g[i]),(uint8_t)std::min(255.0f,px_b[i]));
 
-      # ===== LISTENING — cyan starfield + silver gradient sweep =====
+      # ===== LISTENING — fast dense cyan-violet-silver twinkle =====
       - addressable_lambda:
           name: "Listening For Command"
           update_interval: 33ms
           lambda: |-
             static const int N = 12;
-            static const int MAX_TW = 12;
+            static const int MAX_TW = 18;
             struct Tw { int8_t px; int16_t age_ms; int16_t life_ms; int16_t fade_in_ms; int16_t hold_ms; float pal; float maxB; };
             static Tw tw[MAX_TW] = {0};
             static int last_spawn = 0;
             static int last_state = -1;
             int now = millis();
             if (last_state != 2) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 2; last_spawn = now; }
-            int spawn_ms=90, density=11, life=950, fade_in=150, hold=50; float maxB=0.55f, bias=0.5f;
+            int spawn_ms=50, density=9, life=450, fade_in=80, hold=60; float maxB=0.9f, bias=0.5f;
             if (now - last_spawn > spawn_ms) {
               for (int i=0;i<MAX_TW;i++) {
                 if (tw[i].life_ms <= 0 || tw[i].age_ms >= tw[i].life_ms) {
@@ -689,74 +689,70 @@ light:
               else { float u=(t-0.5f)*2; r=0x8b + (0x5c-0x8b)*u; g=0x5c + (0xf6-0x5c)*u; b=0xf6 + (0xe3-0xf6)*u; }
               px_r[tw[i].px] += r * br; px_g[tw[i].px] += g * br; px_b[tw[i].px] += b * br;
             }
-            // SPIN OVERLAY: silver gradient sweep, speed=5.6 LEDs/sec, width=3, brightness=0.35
-            float spin_pos = fmodf((float)now / 1000.0f * 5.6f, (float)N);
-            for (int i=0;i<N;i++) {
-              float d = (float)i - spin_pos; while (d < 0) d += N; while (d >= N) d -= N;
-              if (d > N/2.0f) d = N - d;  // shortest distance around ring
-              if (d <= 3.0f) {
-                float k = (1.0f - d/3.0f) * 0.35f;
-                px_r[i] += 0xe8 * k; px_g[i] += 0xe6 * k; px_b[i] += 0xf4 * k;
-              }
-            }
             for (int i=0;i<N;i++) it[i] = Color((uint8_t)std::min(255.0f,px_r[i]),(uint8_t)std::min(255.0f,px_g[i]),(uint8_t)std::min(255.0f,px_b[i]));
 
-      # ===== THINKING — indigo-violet starfield + slow violet sweep =====
+      # ===== THINKING — twinkling fireworks (varied colors + timing) =====
       - addressable_lambda:
           name: "Thinking"
           update_interval: 33ms
           lambda: |-
             static const int N = 12;
-            static const int MAX_TW = 12;
-            struct Tw { int8_t px; int16_t age_ms; int16_t life_ms; int16_t fade_in_ms; int16_t hold_ms; float pal; float maxB; };
-            static Tw tw[MAX_TW] = {0};
+            static const int MAX_BURSTS = 6;
+            struct Burst { bool active; int8_t origin; int16_t age_ms; int16_t life_ms; uint8_t cr, cg, cb; float speedMult; float flashFrac; };
+            static Burst bursts[MAX_BURSTS] = {0};
             static int last_spawn = 0;
+            static int next_spawn_delay = 200;
             static int last_state = -1;
             int now = millis();
-            if (last_state != 3) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 3; last_spawn = now; }
-            int spawn_ms=180, density=5, life=3200, fade_in=1400, hold=600; float maxB=0.55f, bias=-0.3f;
-            if (now - last_spawn > spawn_ms) {
-              for (int i=0;i<MAX_TW;i++) {
-                if (tw[i].life_ms <= 0 || tw[i].age_ms >= tw[i].life_ms) {
-                  int active=0; for (int j=0;j<MAX_TW;j++) if (tw[j].life_ms>0 && tw[j].age_ms<tw[j].life_ms) active++;
-                  if (active < density) {
-                    tw[i].px = (esp_random() % N);
-                    tw[i].age_ms = 0;
-                    tw[i].life_ms = life + (esp_random() % (life*3/10)) - (life*15/100);
-                    tw[i].fade_in_ms = fade_in; tw[i].hold_ms = hold;
-                    tw[i].pal = (float)(esp_random() % 1000) / 1000.0f;
-                    tw[i].maxB = maxB * (0.7f + (float)(esp_random() % 300)/1000.0f);
-                    last_spawn = now;
-                  }
+            if (last_state != 3) { for (int i=0;i<MAX_BURSTS;i++) bursts[i].active=false; last_state = 3; last_spawn = now; }
+            if (now - last_spawn > next_spawn_delay) {
+              for (int i=0;i<MAX_BURSTS;i++) {
+                if (!bursts[i].active) {
+                  bursts[i].active = true;
+                  bursts[i].origin = esp_random() % N;
+                  bursts[i].age_ms = 0;
+                  // 40% chance slow contemplative (1400-2000ms), else quick spark (500-900ms)
+                  if ((esp_random() % 100) < 40) bursts[i].life_ms = 1400 + (esp_random() % 600);
+                  else bursts[i].life_ms = 500 + (esp_random() % 400);
+                  // 8 palette options
+                  uint8_t palettes[8][3] = {
+                    {0x8b,0x5c,0xf6}, {0x5c,0xf6,0xe3}, {0xe8,0xe6,0xf4}, {0xa8,0x90,0xf6},
+                    {0x9b,0xc8,0xee}, {0xb8,0xa9,0xee}, {0x80,0xe0,0xee}, {0xc8,0x90,0xea}
+                  };
+                  uint8_t pi = esp_random() % 8;
+                  bursts[i].cr = palettes[pi][0]; bursts[i].cg = palettes[pi][1]; bursts[i].cb = palettes[pi][2];
+                  bursts[i].speedMult = 0.7f + (float)(esp_random() % 700) / 1000.0f;
+                  bursts[i].flashFrac = 0.08f + (float)(esp_random() % 180) / 1000.0f;
+                  last_spawn = now;
+                  next_spawn_delay = 200 + (esp_random() % 900);
                   break;
                 }
               }
             }
             float px_r[N]={0}, px_g[N]={0}, px_b[N]={0};
-            for (int i=0;i<MAX_TW;i++) {
-              if (tw[i].life_ms <= 0) continue;
-              tw[i].age_ms += 33;
-              if (tw[i].age_ms >= tw[i].life_ms) continue;
-              float br;
-              int fade_out = tw[i].life_ms - tw[i].fade_in_ms - tw[i].hold_ms;
-              if (tw[i].age_ms < tw[i].fade_in_ms) br = (float)tw[i].age_ms / tw[i].fade_in_ms;
-              else if (tw[i].age_ms < tw[i].fade_in_ms + tw[i].hold_ms) br = 1.0f;
-              else br = std::max(0.0f, 1.0f - (float)(tw[i].age_ms - tw[i].fade_in_ms - tw[i].hold_ms) / fade_out);
-              br *= tw[i].maxB;
-              float t = tw[i].pal + bias*0.35f; if (t>1.0f) t=1.0f; if (t<0.0f) t=0.0f;
-              float r,g,b;
-              if (t < 0.5f) { float u=t*2; r=0x1e + (0x8b-0x1e)*u; g=0x1b + (0x5c-0x1b)*u; b=0x4b + (0xf6-0x4b)*u; }
-              else { float u=(t-0.5f)*2; r=0x8b + (0x5c-0x8b)*u; g=0x5c + (0xf6-0x5c)*u; b=0xf6 + (0xe3-0xf6)*u; }
-              px_r[tw[i].px] += r * br; px_g[tw[i].px] += g * br; px_b[tw[i].px] += b * br;
-            }
-            // SPIN OVERLAY: violet slow gradient, speed=1.1 LEDs/sec, width=2, brightness=0.6
-            float spin_pos = fmodf((float)now / 1000.0f * 1.1f, (float)N);
-            for (int i=0;i<N;i++) {
-              float d = (float)i - spin_pos; while (d < 0) d += N; while (d >= N) d -= N;
-              if (d > N/2.0f) d = N - d;
-              if (d <= 2.0f) {
-                float k = (1.0f - d/2.0f) * 0.6f;
-                px_r[i] += 0x8b * k; px_g[i] += 0x5c * k; px_b[i] += 0xf6 * k;
+            for (int i=0;i<MAX_BURSTS;i++) {
+              if (!bursts[i].active) continue;
+              bursts[i].age_ms += 33;
+              if (bursts[i].age_ms >= bursts[i].life_ms) { bursts[i].active = false; continue; }
+              float t = (float)bursts[i].age_ms / bursts[i].life_ms;
+              float radius = std::min((float)(N/2), t * (N/2.0f) * bursts[i].speedMult);
+              float brightness = (1.0f - t) * (1.0f - t);
+              for (int j=0;j<N;j++) {
+                float d = (float)abs(j - bursts[i].origin);
+                if (d > N/2.0f) d = N - d;
+                float dist = fabsf(d - radius);
+                if (dist <= 2.0f) {
+                  float k = expf(-(dist*dist) / 2.0f) * brightness;
+                  px_r[j] += bursts[i].cr * k;
+                  px_g[j] += bursts[i].cg * k;
+                  px_b[j] += bursts[i].cb * k;
+                }
+              }
+              if (t < bursts[i].flashFrac) {
+                float k = (1.0f - t/bursts[i].flashFrac);
+                px_r[bursts[i].origin] += bursts[i].cr * k;
+                px_g[bursts[i].origin] += bursts[i].cg * k;
+                px_b[bursts[i].origin] += bursts[i].cb * k;
               }
             }
             for (int i=0;i<N;i++) it[i] = Color((uint8_t)std::min(255.0f,px_r[i]),(uint8_t)std::min(255.0f,px_g[i]),(uint8_t)std::min(255.0f,px_b[i]));
@@ -909,7 +905,7 @@ light:
             static int last_state = -1;
             int now = millis();
             if (last_state != 0) { for (int i=0;i<MAX_TW;i++) tw[i].life_ms = 0; last_state = 0; last_spawn = now; }
-            int spawn_ms=190, density=7, life=3000, fade_in=1500, hold=500; float maxB=0.25f, bias=0.0f;
+            int spawn_ms=160, density=6, life=2800, fade_in=1200, hold=400; float maxB=0.55f, bias=0.4f;
             if (now - last_spawn > spawn_ms) {
               for (int i=0;i<MAX_TW;i++) {
                 if (tw[i].life_ms <= 0 || tw[i].age_ms >= tw[i].life_ms) {
