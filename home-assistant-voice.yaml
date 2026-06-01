@@ -611,9 +611,9 @@ light:
             else spread = N / 2.0f;  // full ring
             // color: silver (0..0.33) -> cyan (0.33..0.66) -> indigo (0.66..1.0)
             float cr, cg, cb;
-            if (t < 0.33f) { float u = t / 0.33f; cr = 0xe8 + (0x5c-0xe8)*u; cg = 0xe6 + (0xf6-0xe6)*u; cb = 0xf4 + (0xe3-0xf4)*u; }
-            else if (t < 0.66f) { float u = (t-0.33f)/0.33f; cr = 0x5c + (0x1e-0x5c)*u; cg = 0xf6 + (0x1b-0xf6)*u; cb = 0xe3 + (0x4b-0xe3)*u; }
-            else { float u = (t-0.66f)/0.34f; cr = 0x1e * (1-u*0.7f); cg = 0x1b * (1-u*0.7f); cb = 0x4b * (1-u*0.7f); }
+            if (t < 0.33f) { float u = t / 0.33f; cr = (float)0xe8 + (float)(0x5c - 0xe8) * u; cg = (float)0xe6 + (float)(0xf6 - 0xe6) * u; cb = (float)0xf4 + (float)(0xe3 - 0xf4) * u; }
+            else if (t < 0.66f) { float u = (t-0.33f)/0.33f; cr = (float)0x5c + (float)(0x1e - 0x5c) * u; cg = (float)0xf6 + (float)(0x1b - 0xf6) * u; cb = (float)0xe3 + (float)(0x4b - 0xe3) * u; }
+            else { float u = (t-0.66f)/0.34f; cr = (float)0x1e * (1-u*0.7f); cg = (float)0x1b * (1-u*0.7f); cb = (float)0x4b * (1-u*0.7f); }
             // brightness envelope: fast attack, hold, fade
             float env;
             if (t < 0.15f) env = t / 0.15f;
